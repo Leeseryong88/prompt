@@ -4,81 +4,261 @@ import { NextResponse } from 'next/server';
 const API_KEY = process.env.GEMINI_API_KEY;
 const API_URL = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
 
-// ASCII 테이블 형식을 마크다운 테이블로 변환하는 함수
-function convertAsciiTableToMarkdown(text: string): string {
+// ASCII 테이블을 HTML 테이블로 직접 변환하는 함수
+function convertToHtmlTable(text: string): string {
   // 여러 줄의 텍스트를 줄 단위로 분리
   const lines = text.split('\n');
   const processedLines = [];
   let inTable = false;
-  let tableStartIndex = -1;
+  let currentTableLines: string[] = [];
+  let tableDetected = false;
 
-  // 테이블 형식 패턴 (예: | ---- | ---- | 또는 +-----+-----+)
-  const tablePatterns = [
-    /^\s*[\|\+][\-\+]+[\|\+]/,  // | ---- | 또는 +----+ 형태
-    /^\s*[\|\+][\s\-\=\+]+[\|\+]/,  // | --- | 또는 + --- + 형태
-    /^\s*[\-\+]{3,}/  // ------- 또는 ++++++ 형태
+  // 마크다운 테이블 패턴 (| --- | --- |)
+  const markdownTablePattern = /^\s*\|.*\|\s*$/;
+  const markdownSeparatorPattern = /^\s*\|[\s\-:\|]+\|\s*$/;
+
+  // ASCII 테이블 패턴 (+---------+------+)
+  const asciiTablePatterns = [
+    /^\s*[\|\+][\-\+=]+[\|\+]/, // | ---- | 또는 +----+ 형태
+    /^\s*[\-\+]{3,}/ // ------- 또는 ++++++
   ];
 
-  // 구분선 위에 헤더가 있는지 확인하는 함수
-  const hasHeaderAbove = (index: number) => {
-    if (index <= 0) return false;
+  // 마크다운 특수문자 처리 함수
+  const processMarkdownInCell = (content: string): string => {
+    // 볼드 처리 (**text** 또는 __text__)
+    content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    content = content.replace(/__(.*?)__/g, '<strong>$1</strong>');
     
-    // 이전 줄이 | text | text | 형태인지 확인
-    return /^\s*[\|\+].+[\|\+]\s*$/.test(lines[index - 1]);
+    // 이탤릭 처리 (*text* 또는 _text_)
+    content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    content = content.replace(/_(.*?)_/g, '<em>$1</em>');
+    
+    // 줄바꿈을 <br> 태그로 변환
+    content = content.replace(/\\n/g, '<br>');
+    
+    // 공백 보존 (연속된 공백을 &nbsp;로 변환)
+    content = content.replace(/ {2,}/g, (match) => {
+      return ' ' + '&nbsp;'.repeat(match.length - 1);
+    });
+    
+    return content;
   };
 
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+  // 마크다운 테이블 변환 함수
+  const processMarkdownTable = (tableLines: string[]): string => {
+    if (tableLines.length < 2) return tableLines.join('\n'); // 최소 헤더와 구분자 필요
+
+    let html = '<div class="table-responsive"><table class="table table-bordered">\n<thead>\n<tr>\n';
     
-    // 잠재적 테이블 구분선 검출
-    const isTableSeparator = tablePatterns.some(pattern => pattern.test(line));
+    // 헤더 행 처리
+    const headerCells = tableLines[0].split('|')
+      .filter((cell, i, arr) => i > 0 && i < arr.length - 1 || (i === 0 && cell.trim()) || (i === arr.length - 1 && cell.trim()))
+      .map(cell => cell.trim());
     
-    if (isTableSeparator && hasHeaderAbove(i)) {
-      // 테이블의 시작 감지
-      if (!inTable) {
-        inTable = true;
-        tableStartIndex = i - 1; // 헤더 줄 인덱스
-        
-        // 헤더 줄 포맷팅 (마크다운 테이블 헤더로 변환)
-        let headerLine = lines[tableStartIndex];
-        headerLine = headerLine.replace(/^\s*[\|\+]\s*|\s*[\|\+]\s*$/g, '|').trim();
-        // 내부 구분자 포맷팅
-        headerLine = headerLine.replace(/\s*[\|\+]\s*/g, ' | ');
-        if (!headerLine.startsWith('|')) headerLine = '| ' + headerLine;
-        if (!headerLine.endsWith('|')) headerLine = headerLine + ' |';
-        
-        // 처리된 헤더를 추가 (테이블 시작)
-        processedLines[tableStartIndex] = headerLine;
-        
-        // 구분선 포맷팅 (마크다운 테이블 구분선으로 변환)
-        const headerCells = headerLine.split('|').filter(cell => cell.trim()).length;
-        let separatorLine = '|';
-        for (let j = 0; j < headerCells; j++) {
-          separatorLine += ' --- |';
+    headerCells.forEach(cell => {
+      const processedCell = processMarkdownInCell(cell);
+      html += `<th>${processedCell}</th>\n`;
+    });
+    
+    html += '</tr>\n</thead>\n<tbody>\n';
+    
+    // 데이터 행 처리 (구분자 행 건너뛰기)
+    for (let i = 2; i < tableLines.length; i++) {
+      if (markdownSeparatorPattern.test(tableLines[i])) continue; // 다른 구분자 행 건너뛰기
+      
+      html += '<tr>\n';
+      
+      const cells = tableLines[i].split('|')
+        .filter((cell, i, arr) => i > 0 && i < arr.length - 1 || (i === 0 && cell.trim()) || (i === arr.length - 1 && cell.trim()))
+        .map(cell => cell.trim());
+      
+      cells.forEach(cell => {
+        const processedCell = processMarkdownInCell(cell);
+        html += `<td>${processedCell}</td>\n`;
+      });
+      
+      html += '</tr>\n';
+    }
+    
+    html += '</tbody>\n</table></div>';
+    return html;
+  };
+
+  // ASCII 표를 HTML 테이블로 변환하는 함수
+  const processAsciiTable = (tableLines: string[]): string => {
+    // 열 경계 위치 찾기
+    const findColumnBoundaries = (headerLine: string): number[] => {
+      const boundaries = [];
+      let inCell = false;
+      
+      for (let i = 0; i < headerLine.length; i++) {
+        if ((headerLine[i] === '|' || headerLine[i] === '+') && !inCell) {
+          boundaries.push(i);
+          inCell = true;
+        } else if ((headerLine[i] !== '|' && headerLine[i] !== '+') && inCell) {
+          inCell = false;
         }
-        
-        processedLines.push(separatorLine);
+      }
+      
+      // 마지막 열 경계 추가
+      if (headerLine.endsWith('|') || headerLine.endsWith('+')) {
+        boundaries.push(headerLine.length - 1);
+      }
+      
+      return boundaries;
+    };
+    
+    // 헤더 행 찾기 (첫 번째 구분자 위의 행)
+    let headerLineIndex = -1;
+    for (let i = 0; i < tableLines.length; i++) {
+      if (asciiTablePatterns.some(pattern => pattern.test(tableLines[i]))) {
+        headerLineIndex = i - 1;
+        break;
+      }
+    }
+    
+    if (headerLineIndex < 0) return tableLines.join('\n'); // 유효한 테이블 아님
+    
+    const headerLine = tableLines[headerLineIndex];
+    const boundaries = findColumnBoundaries(headerLine);
+    
+    if (boundaries.length < 2) return tableLines.join('\n'); // 유효한 열 경계가 없음
+    
+    // HTML 테이블 생성 시작
+    let html = '<div class="table-responsive"><table class="table table-bordered">\n<thead>\n<tr>\n';
+    
+    // 헤더 셀 추출
+    const headerCells = [];
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const start = boundaries[i] + 1;
+      const end = boundaries[i + 1];
+      const cell = headerLine.substring(start, end).trim();
+      headerCells.push(cell);
+      const processedCell = processMarkdownInCell(cell);
+      html += `<th>${processedCell}</th>\n`;
+    }
+    
+    html += '</tr>\n</thead>\n<tbody>\n';
+    
+    // 데이터 행 처리
+    let inDataSection = false;
+    for (let i = headerLineIndex + 2; i < tableLines.length; i++) {
+      // 구분자 행이나 빈 행 건너뛰기
+      if (asciiTablePatterns.some(pattern => pattern.test(tableLines[i])) || !tableLines[i].trim()) {
+        if (inDataSection) break; // 다른 구분자를 만나면 테이블 종료
         continue;
       }
-    } 
-    else if (inTable) {
-      // 테이블 내부의 행 처리
-      if (/^\s*[\|\+].+[\|\+]\s*$/.test(line)) {
-        // 테이블 행 포맷팅 (마크다운 테이블 행으로 변환)
-        line = line.replace(/^\s*[\|\+]\s*|\s*[\|\+]\s*$/g, '|').trim();
-        line = line.replace(/\s*[\|\+]\s*/g, ' | ');
-        if (!line.startsWith('|')) line = '| ' + line;
-        if (!line.endsWith('|')) line = line + ' |';
-        processedLines.push(line);
+      
+      inDataSection = true;
+      const rowLine = tableLines[i];
+      html += '<tr>\n';
+      
+      // 동일한 열 경계를 사용하여 셀 추출
+      for (let j = 0; j < boundaries.length - 1; j++) {
+        const start = boundaries[j] + 1;
+        const end = boundaries[j + 1];
+        let cell = '';
+        
+        if (start < rowLine.length) {
+          cell = (end < rowLine.length ? rowLine.substring(start, end) : rowLine.substring(start)).trim();
+        }
+        
+        const processedCell = processMarkdownInCell(cell);
+        html += `<td>${processedCell}</td>\n`;
+      }
+      
+      html += '</tr>\n';
+    }
+    
+    html += '</tbody>\n</table></div>';
+    return html;
+  };
+
+  // 각 줄 처리
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // 마크다운 테이블 감지
+    if (markdownTablePattern.test(line)) {
+      if (!inTable) {
+        // 새로운 테이블 시작
+        inTable = true;
+        currentTableLines = [line];
+        
+        // 다음 줄이 구분자인지 확인
+        if (i + 1 < lines.length && markdownSeparatorPattern.test(lines[i + 1])) {
+          tableDetected = true;
+        }
       } else {
-        // 테이블 종료 감지
+        // 기존 테이블에 행 추가
+        currentTableLines.push(line);
+      }
+    }
+    // ASCII 테이블 구분자 감지
+    else if (asciiTablePatterns.some(pattern => pattern.test(line))) {
+      if (!inTable) {
+        // 새로운 ASCII 테이블 시작 (이전 줄부터 포함)
+        inTable = true;
+        // 한 줄 위가 헤더인 경우만 테이블로 취급
+        if (i > 0 && /^\s*[\|\+].+[\|\+]\s*$/.test(lines[i - 1])) {
+          currentTableLines = [lines[i - 1], line];
+          tableDetected = true;
+          // 이전 줄을 제거 (이미 테이블에 포함됨)
+          if (processedLines.length > 0) {
+            processedLines.pop();
+          }
+        } else {
+          // 헤더가 없는 경우 일반 텍스트로 처리
+          processedLines.push(line);
+          inTable = false;
+        }
+      } else {
+        // 기존 테이블에 구분자 추가
+        currentTableLines.push(line);
+      }
+    }
+    else if (inTable) {
+      // 테이블 외부 행 감지 (빈 줄이거나 테이블 형식이 아닌 경우)
+      if (!line.trim() || (!markdownTablePattern.test(line) && !asciiTablePatterns.some(pattern => pattern.test(line)) && !/^\s*[\|\+].+[\|\+]\s*$/.test(line))) {
+        // 테이블 종료 및 처리
+        if (tableDetected) {
+          // 마크다운 구분자가 있는 테이블은 마크다운 테이블로 처리
+          if (currentTableLines.some(tableLine => markdownSeparatorPattern.test(tableLine))) {
+            processedLines.push(processMarkdownTable(currentTableLines));
+          } 
+          // 그 외는 ASCII 테이블로 처리
+          else {
+            processedLines.push(processAsciiTable(currentTableLines));
+          }
+        } else {
+          // 테이블이 아닌 경우 그대로 보존
+          processedLines.push(...currentTableLines);
+        }
+        
+        // 현재 행 추가 및 테이블 상태 초기화
+        if (line.trim()) processedLines.push(line);
         inTable = false;
-        processedLines.push(line);
+        tableDetected = false;
+        currentTableLines = [];
+      } else {
+        // 테이블 내부 행 추가
+        currentTableLines.push(line);
       }
     } else {
-      // 테이블 외부 텍스트는 그대로 유지
+      // 일반 텍스트
       processedLines.push(line);
     }
+  }
+
+  // 마지막 테이블 처리
+  if (inTable && tableDetected) {
+    if (currentTableLines.some(tableLine => markdownSeparatorPattern.test(tableLine))) {
+      processedLines.push(processMarkdownTable(currentTableLines));
+    } else {
+      processedLines.push(processAsciiTable(currentTableLines));
+    }
+  } else if (inTable) {
+    processedLines.push(...currentTableLines);
   }
 
   return processedLines.join('\n');
@@ -157,8 +337,8 @@ export async function POST(request: Request) {
     const data = await response.json();
     let result = data.candidates?.[0]?.content?.parts?.[0]?.text || '응답 처리 중 오류가 발생했습니다.';
     
-    // ASCII 테이블을 마크다운 테이블로 변환
-    result = convertAsciiTableToMarkdown(result);
+    // ASCII/마크다운 테이블을 HTML 테이블로 변환
+    result = convertToHtmlTable(result);
 
     return NextResponse.json({ result });
   } catch (error) {

@@ -192,6 +192,8 @@ export default function ResultDisplay({
               border-collapse: collapse;
               border: 1px solid #e2e8f0;
               margin-bottom: 1rem;
+              table-layout: fixed;
+              word-break: break-word;
             }
             .markdown-content .table-responsive {
               overflow-x: auto;
@@ -204,10 +206,23 @@ export default function ResultDisplay({
               padding: 0.75rem 1rem;
               text-align: left;
               border: 1px solid #e2e8f0;
+              white-space: normal;
+              vertical-align: middle;
+              line-height: 1.5;
             }
             .markdown-content td {
               padding: 0.75rem 1rem;
               border: 1px solid #e2e8f0;
+              vertical-align: middle;
+              line-height: 1.5;
+              white-space: normal;
+            }
+            .markdown-content td p, .markdown-content th p {
+              margin: 0;
+              padding: 0;
+            }
+            .markdown-content td strong, .markdown-content th strong {
+              font-weight: 600;
             }
             .markdown-content tr:hover {
               background-color: #f7fafc;
