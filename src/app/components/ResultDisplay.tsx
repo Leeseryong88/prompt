@@ -2,6 +2,9 @@
 
 import { useState, useEffect, ReactNode, ReactElement } from 'react';
 import ReactMarkdown, { Options } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import parse from 'html-react-parser';
 import { ParsedPrompt } from '../types';
 import CopyButton from './CopyButton';
 import FollowUpInput from './FollowUpInput';
@@ -175,10 +178,67 @@ export default function ResultDisplay({
     const contentToRender = isResultCollapsed && executionResult.length > resultPreviewLength
       ? `${executionResult.substring(0, resultPreviewLength)}...`
       : executionResult;
+
+    // HTML 테이블 태그를 포함하는지 확인
+    const containsHtmlTable = /<table|<div class="table/.test(contentToRender);
+    
+    if (containsHtmlTable) {
+      // HTML이 포함된 경우 dangerouslySetInnerHTML로 처리
+      return (
+        <div className="markdown-content">
+          <style jsx global>{`
+            .markdown-content table {
+              min-width: 100%;
+              border-collapse: collapse;
+              border: 1px solid #e2e8f0;
+              margin-bottom: 1rem;
+            }
+            .markdown-content .table-responsive {
+              overflow-x: auto;
+              margin-bottom: 1rem;
+            }
+            .markdown-content th {
+              background-color: #f7fafc;
+              color: #1a202c;
+              font-weight: 600;
+              padding: 0.75rem 1rem;
+              text-align: left;
+              border: 1px solid #e2e8f0;
+            }
+            .markdown-content td {
+              padding: 0.75rem 1rem;
+              border: 1px solid #e2e8f0;
+            }
+            .markdown-content tr:hover {
+              background-color: #f7fafc;
+            }
+            .dark .markdown-content table {
+              border-color: #4a5568;
+            }
+            .dark .markdown-content th {
+              background-color: #2d3748;
+              color: #f7fafc;
+              border-color: #4a5568;
+            }
+            .dark .markdown-content td {
+              border-color: #4a5568;
+              color: #f7fafc;
+            }
+            .dark .markdown-content tr:hover {
+              background-color: #2d3748;
+            }
+          `}</style>
+          <div dangerouslySetInnerHTML={{ __html: contentToRender }} />
+        </div>
+      );
+    }
       
+    // 일반 마크다운 렌더링
     return (
       <ReactMarkdown
         components={markdownComponents}
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
       >
         {contentToRender}
       </ReactMarkdown>
@@ -225,7 +285,13 @@ export default function ResultDisplay({
               rows={5}
             />
           ) : (
-            <ReactMarkdown components={markdownComponents}>{mainPrompt}</ReactMarkdown>
+            <ReactMarkdown 
+              components={markdownComponents}
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw]}
+            >
+              {mainPrompt}
+            </ReactMarkdown>
           )}
         </div>
         
@@ -273,6 +339,8 @@ export default function ResultDisplay({
             <div className="text-sm text-gray-700 dark:text-gray-300">
               <ReactMarkdown 
                 components={markdownComponents}
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
               >
                 {explanation}
               </ReactMarkdown>
