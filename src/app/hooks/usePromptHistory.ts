@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { PromptHistoryItem } from '../types';
 
 const STORAGE_KEY = 'prompt-enhancer-history';
+const MAX_HISTORY_ITEMS = 10; // 최대 히스토리 항목 수 제한
 
 export default function usePromptHistory() {
   const [history, setHistory] = useState<PromptHistoryItem[]>([]);
@@ -13,7 +14,9 @@ export default function usePromptHistory() {
     try {
       const storedHistory = localStorage.getItem(STORAGE_KEY);
       if (storedHistory) {
-        setHistory(JSON.parse(storedHistory));
+        const parsedHistory = JSON.parse(storedHistory);
+        // 최대 항목 수로 제한
+        setHistory(parsedHistory.slice(0, MAX_HISTORY_ITEMS));
       }
     } catch (error) {
       console.error('히스토리 로드 중 오류 발생:', error);
@@ -40,7 +43,13 @@ export default function usePromptHistory() {
       lastUpdatedAt: new Date().toISOString()
     };
     
-    setHistory(prev => [newItem, ...prev]);
+    // 새 항목 추가 후 최대 개수로 제한하여 오래된 항목 삭제
+    setHistory(prev => {
+      const newHistory = [newItem, ...prev];
+      // MAX_HISTORY_ITEMS 개를 초과할 경우 오래된 항목 제거
+      return newHistory.slice(0, MAX_HISTORY_ITEMS);
+    });
+    
     return newItem.id;
   };
   
