@@ -80,6 +80,32 @@ const markdownComponents: Options['components'] = {
   p: ({node, ...props}) => <p className="mb-4" {...props} />,
   // 목록 항목 (li) 태그 스타일링: 아래 마진 추가
   li: ({node, ...props}) => <li className="mb-2" {...props} />,
+  // 테이블 스타일링
+  table: ({node, ...props}) => (
+    <div className="overflow-x-auto mb-4">
+      <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700" {...props} />
+    </div>
+  ),
+  // 테이블 헤더 스타일링
+  thead: ({node, ...props}) => <thead className="bg-gray-100 dark:bg-gray-800" {...props} />,
+  // 테이블 헤더 셀 스타일링
+  th: ({node, ...props}) => (
+    <th 
+      className="border border-gray-300 dark:border-gray-700 px-4 py-2 text-left text-sm font-medium text-gray-900 dark:text-gray-100" 
+      {...props} 
+    />
+  ),
+  // 테이블 바디 스타일링
+  tbody: ({node, ...props}) => <tbody className="bg-white dark:bg-gray-900" {...props} />,
+  // 테이블 행 스타일링
+  tr: ({node, ...props}) => <tr className="hover:bg-gray-50 dark:hover:bg-gray-800" {...props} />,
+  // 테이블 셀 스타일링
+  td: ({node, ...props}) => (
+    <td 
+      className="border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm text-gray-900 dark:text-gray-100" 
+      {...props} 
+    />
+  ),
 };
 
 export default function ResultDisplay({
