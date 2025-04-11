@@ -191,13 +191,13 @@ export default function ResultDisplay({
               min-width: 100%;
               border-collapse: collapse;
               border: 1px solid #e2e8f0;
-              margin-bottom: 1rem;
+              margin-bottom: 1.5rem;
               table-layout: fixed;
               word-break: break-word;
             }
             .markdown-content .table-responsive {
               overflow-x: auto;
-              margin-bottom: 1rem;
+              margin-bottom: 1.5rem;
             }
             .markdown-content th {
               background-color: #f7fafc;
@@ -241,6 +241,34 @@ export default function ResultDisplay({
             }
             .dark .markdown-content tr:hover {
               background-color: #2d3748;
+            }
+            
+            /* 설명 텍스트 스타일 개선 */
+            .markdown-content p {
+              margin-bottom: 1rem;
+              line-height: 1.6;
+            }
+            .markdown-content strong {
+              font-weight: 600;
+              color: #2c5282;
+            }
+            .dark .markdown-content strong {
+              color: #90cdf4;
+            }
+            .markdown-content em {
+              font-style: italic;
+              color: #4a5568;
+            }
+            .dark .markdown-content em {
+              color: #cbd5e0;
+            }
+            /* 설명 문단 사이 간격 */
+            .markdown-content p + p {
+              margin-top: 0.75rem;
+            }
+            /* 표 다음 나오는 첫 문단에 추가 여백 */
+            .markdown-content .table-responsive + p {
+              margin-top: 1.5rem;
             }
           `}</style>
           <div dangerouslySetInnerHTML={{ __html: contentToRender }} />

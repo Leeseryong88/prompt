@@ -283,6 +283,13 @@ export async function POST(request: Request) {
       );
     }
 
+    // 출력 형식에 대한 지시사항 추가
+    const enhancedPrompt = `${prompt}\n\n다음 가이드라인에 따라 응답해주세요:
+1. 표를 작성할 때는 각 셀에 충분한 간격을 두고 내용을 입력해주세요.
+2. 특수문자(**)를 텍스트 서식이 아닌 표기 용도로 사용할 경우 앞에 백슬래시(\\)를 추가해주세요. 예: \\** 
+3. 표 아래 설명이나 참고사항은 표와 구분되도록 빈 줄을 추가하고, 단락을 나누어 작성해주세요.
+4. 중요한 내용은 각 문장이나 단락이 명확히 구분되도록 작성해주세요.`;
+
     const response = await fetch(`${API_URL}?key=${API_KEY}`, {
       method: 'POST',
       headers: {
@@ -294,7 +301,7 @@ export async function POST(request: Request) {
             role: 'user',
             parts: [
               {
-                text: prompt
+                text: enhancedPrompt
               }
             ]
           }
@@ -337,8 +344,20 @@ export async function POST(request: Request) {
     const data = await response.json();
     let result = data.candidates?.[0]?.content?.parts?.[0]?.text || '응답 처리 중 오류가 발생했습니다.';
     
+    // 텍스트 후처리: 에스케이프된 마크다운 문자 처리
+    result = result.replace(/\\\*/g, '*'); // 이스케이프된 별표 처리
+    
+    // 줄바꿈 개선: 연속된 줄바꿈을 하나의 단락 구분으로 표준화
+    result = result.replace(/\n{3,}/g, '\n\n');
+    
+    // 테이블 외부 텍스트에 단락 구분 추가 개선
+    result = result.replace(/(\*\*[\w\s]+\*\*:)/g, '\n\n$1');
+    
     // ASCII/마크다운 테이블을 HTML 테이블로 변환
     result = convertToHtmlTable(result);
+    
+    // 추가 텍스트 처리 - 일반 텍스트 부분의 문단 포맷팅 개선
+    result = processTextFormatting(result);
 
     return NextResponse.json({ result });
   } catch (error) {
@@ -348,4 +367,54 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+// 일반 텍스트 포맷팅 개선 함수
+function processTextFormatting(text: string): string {
+  // HTML 테이블 바깥 부분만 처리하기 위해 임시 마커로 테이블 분리
+  const tableMarker = '<!--TABLE_MARKER-->';
+  let parts = [];
+  let currentIndex = 0;
+  
+  // HTML 테이블 찾기
+  const tableRegex = /<div class="table-responsive">[\s\S]*?<\/table><\/div>/g;
+  let match;
+  
+  while ((match = tableRegex.exec(text)) !== null) {
+    // 테이블 앞의 텍스트 처리
+    if (match.index > currentIndex) {
+      const beforeTable = text.substring(currentIndex, match.index);
+      parts.push(processNonTableText(beforeTable));
+    }
+    
+    // 테이블 자체는 그대로 유지
+    parts.push(match[0]);
+    currentIndex = match.index + match[0].length;
+  }
+  
+  // 마지막 테이블 이후의 텍스트 처리
+  if (currentIndex < text.length) {
+    const afterLastTable = text.substring(currentIndex);
+    parts.push(processNonTableText(afterLastTable));
+  }
+  
+  return parts.join('');
+}
+
+// 테이블 외 텍스트 처리 함수
+function processNonTableText(text: string): string {
+  if (!text.trim()) return text;
+  
+  // 마크다운 볼드 구문 처리
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  // 마크다운 이탤릭 구문 처리
+  text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  // 줄바꿈 후 나오는 볼드 텍스트를 단락으로 처리
+  text = text.replace(/\n\s*(\*\*.*?\*\*)/g, '\n\n$1');
+  
+  // 연속된 줄바꿈을 하나의 <p> 구분자로 변환
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  return paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n\n');
 } 
