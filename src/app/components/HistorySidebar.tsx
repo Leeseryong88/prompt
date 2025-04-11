@@ -57,7 +57,10 @@ export default function HistoryModal({
       >
         {/* 모달 헤더 */} 
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white">프롬프트 히스토리</h2>
+          <div>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">프롬프트 히스토리</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">최근 10개의 프롬프트만 저장됩니다</p>
+          </div>
           <div className="flex items-center gap-4">
             {/* 새로운 질문하기 버튼 */} 
             <button
